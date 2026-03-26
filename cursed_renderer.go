@@ -706,15 +706,7 @@ func (s *cursedRenderer) insertAbove(str string) error {
 	}
 
 	var sb strings.Builder
-	w, h := s.cellbuf.Width(), s.cellbuf.Height()
-	_, y := s.scr.Position()
-
-	// We need to scroll the screen up by the number of lines in the queue.
-	sb.WriteByte('\r')
-	down := h - y - 1
-	if down > 0 {
-		sb.WriteString(ansi.CursorDown(down))
-	}
+	w := s.cellbuf.Width()
 
 	lines := strings.Split(str, "\n")
 	offset := len(lines)
@@ -725,15 +717,20 @@ func (s *cursedRenderer) insertAbove(str string) error {
 		}
 	}
 
-	// Scroll the screen up by the offset to make room for the new lines.
-	sb.WriteString(strings.Repeat("\n", offset))
+	// Move cursor to terminal row 0. Use a large CursorUp value that will
+	// be clamped by the terminal — this works regardless of our absolute
+	// position on the terminal.
+	sb.WriteByte('\r')
+	sb.WriteString(ansi.CursorUp(s.height))
 
-	// XXX: Now go to the top of the screen, insert new lines, and write
-	// the queued strings. It is important to use [Screen.moveCursor]
-	// instead of [Screen.move] because we don't want to perform any checks
-	// on the cursor position.
-	up := offset + h - 1
-	sb.WriteString(ansi.CursorUp(up))
+	// Insert blank lines at the top and write content into them. InsertLine
+	// pushes existing content (including the View area) downward. Lines that
+	// go past the bottom of the screen are lost, but the View area will be
+	// re-rendered by the next flush cycle.
+	//
+	// This avoids the original approach of scrolling via newlines (\n) which
+	// pushes blank terminal rows from above the View into the scrollback
+	// buffer, creating visible blank gaps when the user scrolls up.
 	sb.WriteString(ansi.InsertLine(offset))
 	for _, line := range lines {
 		sb.WriteString(line)
