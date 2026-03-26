@@ -744,6 +744,15 @@ func (s *cursedRenderer) insertAbove(str string) error {
 
 	s.scr.SetPosition(0, 0)
 
+	// InsertLine pushes the View area down. When offset >= s.height, the
+	// View area is pushed past the bottom of the screen and lost. Mark the
+	// renderer dirty so the next flush() will re-render it instead of
+	// short-circuiting on viewEquals.
+	if offset >= s.height {
+		s.scr.Erase()
+		s.needsClear = true
+	}
+
 	if s.logger != nil {
 		s.logger.Printf("insert above: %q", sb.String())
 	}
