@@ -33,6 +33,7 @@ type cursedRenderer struct {
 	mapnl         bool
 	syncdUpdates  bool // whether to use synchronized output mode for updates
 	starting      bool // indicates whether the renderer is starting after being stopped
+	needsClear    bool // set by clearScreen to bypass the view-equality short-circuit in flush
 }
 
 var _ renderer = &cursedRenderer{}
@@ -278,13 +279,14 @@ func (s *cursedRenderer) flush(closing bool) error {
 		}
 	}
 
-	if !s.starting && !closing && s.lastView != nil && viewEquals(s.lastView, &view) && frameArea == s.cellbuf.Bounds() {
+	if !s.starting && !s.needsClear && !closing && s.lastView != nil && viewEquals(s.lastView, &view) && frameArea == s.cellbuf.Bounds() {
 		// No changes, nothing to do.
 		return nil
 	}
 
 	// We're no longer starting.
 	s.starting = false
+	s.needsClear = false
 
 	if frameArea != s.cellbuf.Bounds() {
 		s.scr.Erase() // Force a full redraw to avoid artifacts.
@@ -627,9 +629,11 @@ func (s *cursedRenderer) resize(w, h int) {
 func (s *cursedRenderer) clearScreen() {
 	s.mu.Lock()
 	// Move the cursor to the top left corner of the screen and trigger a full
-	// screen redraw.
+	// screen redraw. Set needsClear so flush() won't short-circuit when the
+	// View content hasn't changed.
 	s.scr.MoveTo(0, 0)
 	s.scr.Erase()
+	s.needsClear = true
 	s.mu.Unlock()
 }
 
